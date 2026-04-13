@@ -1,0 +1,126 @@
+name: Build StudyQuest
+
+on:
+  push:
+    tags:
+      - "v*"          # triggers on tags like v1.0.0, v1.2.3
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+
+  # ─── Linux Build (Ubuntu 20.04 = glibc 2.31 — works on almost all distros) ───
+  build-linux:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk python3-dev tk-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install customtkinter matplotlib pandas pillow pyinstaller
+
+      - name: Build Linux binary
+        run: |
+          pyinstaller studyquest.spec
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyQuest-Linux
+          path: dist/StudyQuest
+
+  # ─── Windows Build ─────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          pip install customtkinter matplotlib pandas pillow pyinstaller
+
+      - name: Convert icon to .ico for Windows
+        run: |
+          python -c "from PIL import Image; Image.open('icon_256.png').save('icon.ico')"
+
+      - name: Patch spec for Windows icon
+        run: |
+          python -c "
+          with open('studyquest.spec', 'r') as f:
+              content = f.read()
+          content = content.replace(\"icon='icon_256.png'\", \"icon='icon.ico'\")
+          with open('studyquest.spec', 'w') as f:
+              f.write(content)
+          "
+
+      - name: Build Windows executable
+        run: |
+          pyinstaller studyquest.spec
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyQuest-Windows
+          path: dist/StudyQuest.exe
+
+  # ─── Create GitHub Release with both files attached ────────────────────────
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: StudyQuest-Linux
+          path: artifacts/linux
+
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: StudyQuest-Windows
+          path: artifacts/windows
+
+      - name: Make Linux binary executable
+        run: chmod +x artifacts/linux/StudyQuest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "StudyQuest ${{ github.ref_name }}"
+          body: |
+            ## StudyQuest ${{ github.ref_name }}
+
+            ### Download
+            | Platform | File |
+            |----------|------|
+            | 🐧 Linux (Fedora / Ubuntu / GNOME) | `StudyQuest-Linux` |
+            | 🪟 Windows 11 | `StudyQuest-Windows.exe` |
+
+            ### Linux instructions
+            ```bash
+            chmod +x StudyQuest-Linux
+            ./StudyQuest-Linux
+            ```
+
+            ### Windows instructions
+            Just double-click `StudyQuest-Windows.exe` — no install needed.
+          files: |
+            artifacts/linux/StudyQuest
+            artifacts/windows/StudyQuest.exe

@@ -55,19 +55,10 @@ jobs:
         run: |
           pip install customtkinter matplotlib pandas pillow pyinstaller
 
-      - name: Convert icon to .ico for Windows
+      - name: Convert icon to .ico and patch spec
         run: |
           python -c "from PIL import Image; Image.open('icon_256.png').save('icon.ico')"
-
-      - name: Patch spec for Windows icon
-        run: |
-          python -c "
-          with open('studyquest.spec', 'r') as f:
-              content = f.read()
-          content = content.replace(\"icon='icon_256.png'\", \"icon='icon.ico'\")
-          with open('studyquest.spec', 'w') as f:
-              f.write(content)
-          "
+          python patch_spec.py
 
       - name: Build Windows executable
         run: |
